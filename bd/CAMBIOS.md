@@ -167,6 +167,17 @@ Ejecuta `bd/sql/14_semilla_escenarios_provisionales.sql`, también incluido en `
 - `downgrade` no borra filas: pueden estar referenciadas por `programa_umbral` e `indice_mtd`.
 - Cómo se interpretan los límites al clasificar un MTD (bordes abiertos o cerrados) es la pendiente CT-04; esta revisión solo carga el catálogo.
 
+### Revisión `0006` — Semilla de permisos por rol
+
+Ejecuta `bd/sql/15_semilla_permisos.sql`, también incluido en `00_instalar_todo.sql`. Siembra `sigat.permiso` (**25 permisos**) y `sigat.rol_permiso` (**54 pares**) con exactamente la matriz que la API aplica hoy (`src/sigat_api/modules/identidad/permisos.py`, usada por `requiere(...)`).
+
+- Usa los mismos códigos `area.accion`, con punto, como exige el CHECK `permiso_codigo_formato`, y las mismas asignaciones por rol. Así lo decidió el responsable del proyecto el 2026-11-04: no se siembran los códigos alternativos de la documentación ni se duplican capacidades.
+- `permisos.py` sigue siendo la fuente de verdad del backend; la base de datos queda como reflejo exacto. `tests/unit/test_semilla_permisos_migracion.py` falla si las dos divergen o si alguna ruta usa un código que no está en la matriz.
+- Los roles se buscan por `rol_codigo`, nunca por id. El PRODUCTOR **no** recibe `visitas.consultar`, igual que en `permisos.py`.
+- Solo inserta, y solo si las dos tablas están vacías. Si ya contienen exactamente esta matriz, no hace nada. Si contienen otra cosa (carga parcial, distinta o con otras descripciones), **se detiene** con un error que enumera las diferencias, sin completar, modificar ni borrar filas.
+- La auditoría `trg_aud_rol_permiso` registra cada par en `bitacora_auditoria` sin usuario, porque no hay actor durante una migración.
+- `downgrade` no borra filas: la matriz no se distingue con seguridad de una carga institucional idéntica.
+
 ### Consideraciones de revisión
 
 Las modificaciones de restricciones de `operacion_sync` en los ajustes v8 y v9 amplían los valores permitidos para incorporar nuevas entidades sincronizables. Como utilizan `DROP CONSTRAINT` seguido de `ADD CONSTRAINT`, deben contar con revisión técnica y aprobación del responsable de la base de datos antes de integrarse.
