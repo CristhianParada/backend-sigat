@@ -139,6 +139,19 @@ Crea el esquema `api` y las tablas técnicas necesarias para gestionar sesiones 
 
 Incorpora la categoría `solicitudes_cuenta` al catálogo de notificaciones. Permite identificar los avisos relacionados con solicitudes de recuperación de acceso. La operación es idempotente y no elimina categorías ni notificaciones existentes.
 
+### Revisión `0004` — Vistas de consulta del productor
+
+Ejecuta `bd/sql/13_vistas_productor.sql`, que **solo agrega** tres vistas y tres funciones de lectura; no crea ni modifica tablas, columnas, restricciones, índices ni datos, y no reemplaza vistas existentes. El archivo también se incluye en `00_instalar_todo.sql`, así que una instalación por psql y una por Alembic quedan iguales. Es idempotente (`CREATE OR REPLACE`).
+
+- `v_actividad_lote_detalle` (F1 del informe de consumo): historial por lote con responsable, rol, título y detalle. Cuenta las trampas solo del lote de cada fila y del día de la visita, con lecturas vigentes y trampas distintas. El texto de fecha no depende del idioma del servidor. `linaje` y `es_inspeccion_oficial` son nulos en las vigilancias porque `visita` no registra linaje.
+- `v_aplicacion_ultima_lote` (F3 / RF-041): última aplicación vigente de cada lote, incluidos los lotes sin aplicaciones, y los días transcurridos en la zona horaria del predio.
+- `v_cosecha_lote_vigente` (F2 / RF-042): cosecha vigente de cada lote (esperada + real), incluidos los lotes sin cosechas. Aplica la regla **P-04, una sola cosecha abierta por lote** (decisión del responsable del proyecto, 2026-11-05): elige la abierta y, si no hay ninguna, la más reciente. `cosechas_abiertas` muestra si un lote incumple la regla, que todavía no se impone en la base de datos.
+- `fn_actividad_lote_detalle(usua)`, `fn_cosecha_lote_vigente(usua)` y `fn_aplicacion_ultima_lote(usua)`: las mismas vistas filtradas con `fn_lotes_visibles`. Las vistas no son un mecanismo de autorización; el backend debe consultar las funciones.
+- No se edita `03_vistas.sql`, porque la revisión 0001 lo ejecuta al instalar desde cero.
+- `downgrade` elimina solo estos seis objetos.
+
+Detalle, decisiones y limitaciones: `docs/VISTAS_PRODUCTOR.md`.
+
 ### Consideraciones de revisión
 
 Las modificaciones de restricciones de `operacion_sync` en los ajustes v8 y v9 amplían los valores permitidos para incorporar nuevas entidades sincronizables. Como utilizan `DROP CONSTRAINT` seguido de `ADD CONSTRAINT`, deben contar con revisión técnica y aprobación del responsable de la base de datos antes de integrarse.

@@ -13,5 +13,6 @@
 \ir 10_ajustes_v9.sql
 \ir 11_validacion_v9.sql
 \ir 12_ajustes_v9_1.sql
+\ir 13_vistas_productor.sql
 \ir 06_validacion.sql
 \echo 'SIGAT v9 instalado (sin cuentas de usuario: cree el primer administrador con el backend).'
