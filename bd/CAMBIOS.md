@@ -152,6 +152,21 @@ Ejecuta `bd/sql/13_vistas_productor.sql`, que **solo agrega** tres vistas y tres
 
 Detalle, decisiones y limitaciones: `docs/VISTAS_PRODUCTOR.md`.
 
+### Revisión `0005` — Semilla provisional de escenarios de trampeo
+
+Ejecuta `bd/sql/14_semilla_escenarios_provisionales.sql`, también incluido en `00_instalar_todo.sql`. Inserta los 4 escenarios de RN-002 con los valores del informe de consumo de datos (§10.1; Tabla 1, OIEA 2005), **como provisionales**: así lo decidió el responsable del proyecto el 2026-11-04 (pendiente P-02). `esce_fuente` lo indica en cada fila.
+
+| Escenario | `esce_orden` | desde | hasta |
+|---|:-:|---|---|
+| Área infestada | 1 | 1,0000 | nulo (sin límite) |
+| Supresión | 2 | 0,1000 | 1,0000 |
+| Erradicación | 3 | 0,0000 | 0,1000 |
+| Exclusión | 4 | 0,0000 | 0,0000 |
+
+- Solo inserta, y solo si la tabla está vacía. Si ya contiene exactamente estos 4 escenarios, no hace nada. Si contiene otra cosa (una carga parcial, distinta u oficial con otra fuente), **se detiene** con un error que enumera las diferencias, sin completar, modificar ni borrar filas.
+- `downgrade` no borra filas: pueden estar referenciadas por `programa_umbral` e `indice_mtd`.
+- Cómo se interpretan los límites al clasificar un MTD (bordes abiertos o cerrados) es la pendiente CT-04; esta revisión solo carga el catálogo.
+
 ### Consideraciones de revisión
 
 Las modificaciones de restricciones de `operacion_sync` en los ajustes v8 y v9 amplían los valores permitidos para incorporar nuevas entidades sincronizables. Como utilizan `DROP CONSTRAINT` seguido de `ADD CONSTRAINT`, deben contar con revisión técnica y aprobación del responsable de la base de datos antes de integrarse.
