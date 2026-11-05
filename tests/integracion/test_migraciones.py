@@ -88,7 +88,7 @@ def test_actualizar_base_v9_existente_no_pierde_datos(h: SimpleNamespace) -> Non
         # Volver a aplicar no cambia nada.
         r = h.alembic(nombre, "upgrade", "head")
         assert r.returncode == 0, r.stderr
-        assert h.consulta(nombre, "SELECT version_num FROM api.alembic_version") == [("0003",)]
+        assert h.consulta(nombre, "SELECT version_num FROM api.alembic_version") == [("0006",)]
     finally:
         h.borrar_bd(nombre)
 
@@ -111,17 +111,22 @@ def test_esquema_sigat_de_otra_version_se_rechaza_sin_tocarlo(h: SimpleNamespace
 
 
 def test_downgrade_no_borra_el_esquema_institucional(h: SimpleNamespace) -> None:
+    """Bajar a 0002 conserva TODAS las tablas y vistas institucionales. Lo único que desaparece son
+    las tres vistas que agrega la 0004 (su downgrade elimina solo sus propios objetos)."""
+    sql = "SELECT table_type, table_name FROM information_schema.tables WHERE table_schema='sigat'"
     nombre = h.crear_bd()
     try:
         assert h.alembic(nombre, "upgrade", "head").returncode == 0
-        tablas = h.consulta(
-            nombre, "SELECT count(*) FROM information_schema.tables WHERE table_schema='sigat'"
-        )
+        antes = set(h.consulta(nombre, sql))
         r = h.alembic(nombre, "downgrade", "0002")
         assert r.returncode == 0, r.stderr
-        assert (
-            h.consulta(nombre, "SELECT count(*) FROM information_schema.tables WHERE table_schema='sigat'")
-            == tablas
-        )
+        despues = set(h.consulta(nombre, sql))
+        assert despues <= antes
+        assert antes - despues == {
+            ("VIEW", "v_actividad_lote_detalle"),
+            ("VIEW", "v_aplicacion_ultima_lote"),
+            ("VIEW", "v_cosecha_lote_vigente"),
+        }
+        assert sum(1 for tipo, _ in despues if tipo == "BASE TABLE") == 74
     finally:
         h.borrar_bd(nombre)
