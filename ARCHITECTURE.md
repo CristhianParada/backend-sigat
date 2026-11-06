@@ -56,6 +56,11 @@ La aplicación se divide en módulos que agrupan funcionalidades relacionadas co
 | Planificación | Organización de actividades y tareas operativas. |
 | Imágenes | Gestión de archivos y evidencias asociadas a los registros. |
 | Auditoría | Consulta y seguimiento de las operaciones registradas en el sistema. |
+| Administración | Gestión institucional de auditoría (audit log), bitácoras y monitoreo de salud. |
+| Importación | Carga masiva de archivos CSV/Excel de campañas anteriores. |
+| Laboratorio | Muestreo, remisión de especímenes y diagnóstico taxonómico. |
+| Calidad | Verificaciones BPA (Buenas Prácticas Agrícolas) y criterios de calidad. |
+
 
 La modularidad permite organizar las funcionalidades por dominio y facilitar su mantenimiento y evolución.
 
