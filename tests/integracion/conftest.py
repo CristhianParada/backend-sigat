@@ -62,6 +62,8 @@ def entorno(nombre: str, **extra: str) -> dict[str, str]:
         SIGAT_JWT_SECRETO=env.get("SIGAT_JWT_SECRETO", "solo-pruebas-" + "x" * 40),
         SIGAT_ENTORNO="pruebas",
         PYTHONPATH=str(RAIZ / "src"),
+        # El subproceso escribe en UTF-8 y aquí se lee en UTF-8 (en Windows, sin esto, cp1252).
+        PYTHONIOENCODING="utf-8",
     )
     env.update(extra)
     return env
@@ -74,6 +76,8 @@ def alembic(nombre: str, *args: str) -> subprocess.CompletedProcess[str]:
         env=entorno(nombre),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 
@@ -103,6 +107,8 @@ def psql(nombre: str, *args: str) -> subprocess.CompletedProcess[str]:
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 
@@ -115,6 +121,8 @@ def cli(nombre: str, *args: str, entrada: str = "", **extra: str) -> subprocess.
         input=entrada,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 
