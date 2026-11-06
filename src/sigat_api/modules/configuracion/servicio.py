@@ -65,6 +65,10 @@ class ServicioLotes:
         """ADR-06: genera evento de cambio de área (puede afectar la normalización del MTD) e invalida paquete."""
         raise NoImplementado("Nueva geometría de lote")
 
+    async def contar_sobre_umbral(self, actor: Actor) -> int:
+        """Total de lotes visibles que superan el umbral para este agronomo"""
+        return await self._repo.contar_lotes_sobre_umbral(actor.usua_id)
+
 
 class ServicioTrampas:
     def __init__(self, repo: RepositorioConfiguracion, cola: Cola) -> None:
