@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from sigat_api.compartido.errores import NoImplementado
 from sigat_api.modules.registro.dominio import EstadoPrevio
@@ -62,7 +62,7 @@ class RepositorioRegistro:
     async def autorreportes(self, entidad: str, usua_id: int, lote_id: int | None, cursor: str | None) -> Any:
         raise NoImplementado("Autorreportes")
 
-    async def contar_por_revisar(self, usua_id: int)-> int:
+    async def contar_por_revisar(self, usua_id: int) -> int:
         sql = """
         SELECT count(*)::int
          FROM sigat.v_registro_campo vrc

@@ -63,7 +63,7 @@ class ServicioPlanificacion:
     async def contar_pendientes(self, actor: Actor) -> int:
         """Total de planificaciones en estado pendiente creadas por el agronomo"""
         return await self._repo.contar_por_estado(actor.usua_id, "pendiente")
-    
+
     async def contar_en_curso(self, actor: Actor) -> int:
         """Total de planificaciones en estado pendiente creadas por el agronomo"""
         return await self._repo.contar_por_estado(actor.usua_id, "aceptada")

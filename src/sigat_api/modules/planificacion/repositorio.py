@@ -3,8 +3,8 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from sigat_api.compartido.errores import NoImplementado
 
