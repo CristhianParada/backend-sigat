@@ -105,6 +105,10 @@ class ServicioRevision:
         """pendiente -> en_revision con motivo (notifica al técnico)."""
         raise NoImplementado("Marcar en revisión")
 
+    async def contar_por_revisar(self, actor: Actor) -> int:
+        """Total de visitas pendientes de revisar en los predios del agronomo."""
+        return await self._repo.contar_por_revisar(actor.usua_id)
+
 
 class ServicioConsultaRegistro:
     """Lecturas para pantallas. Siempre filtradas por fn_lotes_visibles."""
