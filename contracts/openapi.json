@@ -3394,7 +3394,7 @@
           },
           "lote_area": {
             "title": "Lote Area",
-            "type": "string"
+            "type": "number"
           },
           "lote_codigo": {
             "anyOf": [
@@ -3673,7 +3673,7 @@
           },
           "lote_area": {
             "title": "Lote Area",
-            "type": "string"
+            "type": "number"
           },
           "lote_codigo": {
             "anyOf": [
@@ -7880,11 +7880,11 @@
           },
           "latitud": {
             "title": "Latitud",
-            "type": "string"
+            "type": "number"
           },
           "longitud": {
             "title": "Longitud",
-            "type": "string"
+            "type": "number"
           },
           "lote_id": {
             "anyOf": [

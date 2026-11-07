@@ -11,7 +11,13 @@ from uuid import UUID
 
 from pydantic import Field
 
-from sigat_api.compartido.esquemas import ColeccionGeoJson, Esquema, FeatureGeoJson, GeometriaGeoJson
+from sigat_api.compartido.esquemas import (
+    ColeccionGeoJson,
+    DecimalJson,
+    Esquema,
+    FeatureGeoJson,
+    GeometriaGeoJson,
+)
 
 
 # ------------------------------------------------------------------ predio
@@ -75,7 +81,7 @@ class Lote(Esquema):
     lote_id: int
     lote_codigo: str | None
     lote_descripcion: str
-    lote_area: Decimal
+    lote_area: DecimalJson
     pred_id: int
     pred_nombre: str
     productor: str
@@ -140,8 +146,8 @@ class Trampa(Esquema):
     tipo: str = Field(..., description="Jackson (impar) / McPhail (par), RN-005.")
     lote_id: int | None
     pred_id: int
-    longitud: Decimal
-    latitud: Decimal
+    longitud: DecimalJson
+    latitud: DecimalJson
     celda: str | None
     estado: str
     atrayente: str | None = None
