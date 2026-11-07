@@ -9,12 +9,14 @@ from pydantic import SecretStr
 from sigat_api.api.fabricas import (
     servicio_lotes,
     servicio_notificaciones,
+    servicio_perfil,
     servicio_planificacion,
     servicio_revision,
 )
 from sigat_api.compartido.tipos import Cliente, RolCodigo
 from sigat_api.config import Configuracion
 from sigat_api.infra.seguridad.tokens import ServicioTokens
+from sigat_api.modules.identidad import esquemas as ei
 
 
 def _generar_token(rol: RolCodigo, usua_id: int = 1) -> str:
@@ -24,6 +26,7 @@ def _generar_token(rol: RolCodigo, usua_id: int = 1) -> str:
     return token
 
 
+# --- 1. Resumen de inicio ---
 def test_inicio_agronomo_devuelve_indicadores(cliente: TestClient) -> None:
     mock_notis = AsyncMock()
     mock_notis.conteo.return_value.no_leidas = 2
@@ -84,7 +87,6 @@ def test_inicio_otro_rol_no_incluye_bloque_agronomo(cliente: TestClient) -> None
     assert datos["rol"] == "ADMINISTRADOR"
     assert datos["agronomo"] is None
 
-    # Verificamos que al no ser agronomo, nunca consulto sus metodos
     mock_revision.contar_por_revisar.assert_not_called()
     mock_planif.contar_pendientes.assert_not_called()
     mock_planif.contar_en_curso.assert_not_called()
@@ -95,3 +97,47 @@ def test_inicio_sin_token_da_401(cliente: TestClient) -> None:
     respuesta = cliente.get("/api/v1/yo/inicio")
     assert respuesta.status_code == 401
     assert respuesta.headers["content-type"].startswith("application/problem+json")
+
+
+# --- 2. Contexto del usuario (Perfil y Predios) ---
+def test_perfil_corresponde_al_usuario_autenticado(cliente: TestClient) -> None:
+    mock_perfil = AsyncMock()
+    mock_perfil.perfil.return_value = ei.PerfilPropio(
+        usua_id=10,
+        nombre="Agrónomo Supervisor",
+        usuario="agronomo.test",
+        correo="agronomo@sigat.gov.co",
+        telefono="3101234567",
+        rol=RolCodigo.AGRONOMO_SUPERVISOR,
+        rol_descripcion="Agrónomo supervisor fitosanitario",
+        foto_arch_id=None,
+        foto_url=None,
+        actualizado_en=None,
+    )
+    cliente.app.dependency_overrides[servicio_perfil] = lambda: mock_perfil
+
+    token = _generar_token(RolCodigo.AGRONOMO_SUPERVISOR, usua_id=10)
+    respuesta = cliente.get("/api/v1/yo/perfil", headers={"Authorization": f"Bearer {token}"})
+
+    assert respuesta.status_code == 200
+    datos = respuesta.json()
+    assert datos["usua_id"] == 10
+    assert datos["rol"] == "AGRONOMO_SUPERVISOR"
+    assert datos["usuario"] == "agronomo.test"
+
+
+def test_predios_aplica_reglas_de_acceso(cliente: TestClient) -> None:
+    mock_perfil = AsyncMock()
+    mock_perfil.predios.return_value = [
+        ei.PredioAccesible(pred_id=1, pred_nombre="Finca El Durazno", origen="asignacion")
+    ]
+    cliente.app.dependency_overrides[servicio_perfil] = lambda: mock_perfil
+
+    token = _generar_token(RolCodigo.AGRONOMO_SUPERVISOR, usua_id=10)
+    respuesta = cliente.get("/api/v1/yo/predios", headers={"Authorization": f"Bearer {token}"})
+
+    assert respuesta.status_code == 200
+    datos = respuesta.json()
+    assert len(datos) == 1
+    assert datos[0]["pred_id"] == 1
+    assert datos[0]["pred_nombre"] == "Finca El Durazno"
