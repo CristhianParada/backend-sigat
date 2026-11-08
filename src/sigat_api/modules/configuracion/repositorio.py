@@ -5,6 +5,7 @@ from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from sigat_api.compartido.errores import NoImplementado
@@ -110,3 +111,15 @@ class RepositorioConfiguracion:
 
     async def invalidar_paquetes(self, pred_id: int, motivo: str) -> None:
         raise NoImplementado("Invalidar paquetes")
+
+    async def contar_lotes_sobre_umbral(self, usua_id: int) -> int:
+        """Cuenta lotes visibles del agronomo cuyo MTD supera el umbral fitosanitario."""
+        sql = """
+        SELECT count(*)::int
+          FROM sigat.v_lote_resumen_app vlra
+          JOIN sigat.fn_lotes_visibles(:u) lv ON lv.lote_id = vlra.lote_id
+        WHERE vlra.contraste = 'igual_o_superior_umbral'
+          OR vlra.escenario IN ('Supresión', 'Área infestada')
+        """
+        resultado = await self._con.scalar(text(sql), {"u": usua_id})
+        return int(resultado or 0)
