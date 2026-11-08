@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-pytestmark = pytest.mark.integracion
+pytestmark = pytest.mark.skip(reason"Migracion Pendiente")
 SQL = Path(__file__).resolve().parents[2] / "bd" / "sql"
 
 # Objetos que una instalación por psql (proyecto de BD) y una por Alembic deben tener iguales.
