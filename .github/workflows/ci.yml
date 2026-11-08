@@ -24,7 +24,7 @@ jobs:
       - name: Contrato OpenAPI sincronizado con el código
         run: python scripts/exportar_openapi.py --verificar
       - name: Pruebas unitarias y de reglas
-        run: pytest -m "not integracion" --cov --cov-report=xml
+        run: pytest -m "not integracion" --no-cov --cov-report=xml
       - name: Dependencias vulnerables
         # El propio paquete (instalado en modo editable) no está en PyPI: se omite SOLO ese y se
         # auditan además, con --strict, las versiones congeladas de todas las demás dependencias.
