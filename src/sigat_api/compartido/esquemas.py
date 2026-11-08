@@ -1,10 +1,16 @@
 """Esquemas comunes del contrato HTTP: paginación, problema RFC 9457 y GeoJSON."""
 
-from typing import Any, Generic, Literal, TypeVar
+from decimal import Decimal
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 
 T = TypeVar("T")
+
+# Pydantic v2 serializa ``Decimal`` como TEXTO JSON ("1.2500"). Los clientes (Flutter) leen estos
+# campos como número (``(j['lote_area'] as num).toDouble()``) y fallan al recibir una cadena.
+# ``DecimalJson`` mantiene la precisión decimal en Python y la entrega como número en el JSON.
+DecimalJson = Annotated[Decimal, PlainSerializer(float, return_type=float, when_used="json")]
 
 
 class Esquema(BaseModel):

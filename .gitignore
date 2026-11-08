@@ -107,3 +107,6 @@ desktop.ini
 # contracts/openapi.json  <- NO ignorar
 contracts/*.tmp.json
 contracts/diff/
+
+# --- Scripts locales de prueba (no forman parte del producto) -----------------
+scripts/dev/
