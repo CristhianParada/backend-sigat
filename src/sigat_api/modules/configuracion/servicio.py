@@ -50,13 +50,17 @@ class ServicioLotes:
         self._cola = cola
 
     async def listar(self, actor: Actor, pred_id: int | None, incluir_indicadores: bool) -> list[e.Lote]:
-        """Técnico: solo los lotes de sus actividades vigentes (v_asignacion_lote_tecnico) — lo
-        resuelve fn_lotes_visibles. El estado de jornada (pendiente/en curso/visitado) NO viene del
-        servidor: lo deriva el móvil de su visita local (CONCORDANCIA §4.1).
+        """Lotes visibles para el actor. La visibilidad y la asignación las resuelve
+        ``fn_lotes_visibles`` (a través de ``fn_lote_app``): administrador todos; productor y
+        agrónomo/supervisor los de sus predios (``v_acceso_predio``); técnico los de sus
+        asignaciones vigentes. ``pred_id`` solo acota el resultado. Los lotes dados de baja no
+        aparecen (``v_lote_app``).
 
         ``incluir_indicadores`` es de la web (tarjetas del panel de administración). Los indicadores
-        se calculan con las visitas, el programa y los periodos de trampeo, que son de otro sprint;
-        mientras tanto el bloque va en ``null`` (lo admite el esquema) en vez de inventar cifras.
+        se calculan con las visitas, el programa y los periodos de trampeo, que son de otro sprint
+        (fuera del alcance del issue #6); mientras tanto el bloque va en ``null`` (lo admite el
+        esquema) en vez de inventar cifras. PENDIENTE DE REVISIÓN: no existe vista ni función en la
+        BD que calcule los campos obligatorios de ``IndicadoresLote``.
         """
         filas = await self._repo.lotes_visibles(actor.usua_id, pred_id)
         return [e.Lote(**fila) for fila in filas]
