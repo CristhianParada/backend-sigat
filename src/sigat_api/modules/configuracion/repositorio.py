@@ -129,7 +129,21 @@ SELECT v.*,
         raise NoImplementado("Alta de lote")
 
     async def actualizar_lote(self, lote_id: int, cambios: dict[str, Any]) -> None:
-        raise NoImplementado("Actualizar lote")
+        """Actualiza los campos permitidos del lote.
+
+        Args:
+            lote_id: Identificador del lote a actualizar.
+            cambios: Diccionario con los campos nuevos (debe incluir los de auditoría).
+        """
+        if not cambios:
+            return
+
+        # Construimos la cláusula SET dinámicamente
+        set_clauses = [f"{k} = :{k}" for k in cambios]
+        sql = f"UPDATE sigat.lote SET {', '.join(set_clauses)} WHERE lote_id = :lote_id"  # noqa: S608
+
+        # Ejecutamos la consulta con los parámetros
+        await self._con.execute(text(sql), {**cambios, "lote_id": lote_id})
 
     async def versiones_geometria(self, lote_id: int) -> list[dict[str, Any]]:
         raise NoImplementado("Versiones de geometría")

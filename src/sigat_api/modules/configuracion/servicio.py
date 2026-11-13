@@ -80,8 +80,24 @@ class ServicioLotes:
         raise NoImplementado("Alta de lote")
 
     async def actualizar(self, actor: Actor, lote_id: int, s: e.ActualizacionLote) -> e.LoteDetalle:
-        """Web ``updateLot``: el 'propietario' no se edita aquí (es el productor del predio)."""
-        raise NoImplementado("Actualizar lote")
+        """Actualiza solo los campos permitidos. El productor no se edita aquí (sale del predio)."""
+
+        # 1. Validar visibilidad primero (devuelve 404 si no le pertenece, por seguridad)
+        if not await self._repo.lote_visible(actor.usua_id, lote_id):
+            raise NoEncontrado("El lote no existe o no es visible para usted.", codigo="LOTE_NO_ENCONTRADO")
+
+        # 2. Extraer solo los campos que el usuario envió (protege contra inyección)
+        cambios = s.model_dump(exclude_unset=True)
+
+        # 3. Inyectar campos de auditoría obligatorios
+        cambios["lote_fecha_actualizacion"] = datetime.now(UTC)
+        cambios["lote_tecnico_actualizacion_id"] = actor.usua_id
+
+        # 4. Ejecutar la actualización en la base de datos
+        await self._repo.actualizar_lote(lote_id, cambios)
+
+        # 5. Retornar el detalle actualizado
+        return await self.obtener(actor, lote_id)
 
     async def geometrias(self, actor: Actor, lote_id: int) -> list[e.VersionGeometriaLote]:
         raise NoImplementado("Versiones de geometría")

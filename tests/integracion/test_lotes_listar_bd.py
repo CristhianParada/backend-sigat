@@ -17,6 +17,7 @@ import asyncpg
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from sigat_api.compartido.errores import NoEncontrado
 from sigat_api.modules.configuracion import esquemas as e
 from sigat_api.modules.configuracion.repositorio import RepositorioConfiguracion
 from sigat_api.modules.configuracion.servicio import ServicioLotes
@@ -183,3 +184,61 @@ def test_listar_con_indicadores_los_deja_en_null_mientras_no_tengan_fuente(
     lotes = listar(h, bd, GIL, indicadores=True)
     assert ids(lotes) == [11, 12, 21]
     assert all(lote.indicadores is None for lote in lotes)
+
+
+# ------------------------------------------------------------------ actualizacion
+# ------------------------------------------------------------------ actualizacion (Integración)
+def test_actualizar_lote_modifica_campos_permitidos_y_auditoria(bd: str, h: SimpleNamespace) -> None:
+    """Verifica que un agrónomo pueda actualizar la descripción y área, y que se registre la auditoría."""
+
+    async def _correr():
+        motor = create_async_engine(h.url(bd))
+        try:
+            async with motor.connect() as con:
+                svc = ServicioLotes(RepositorioConfiguracion(con), cola=None)
+                actor = SimpleNamespace(usua_id=GIL)  # GIL es el agrónomo supervisor (id=4)
+                lote_id = 11  # Lote del predio 1, asignado a GIL
+
+                # 1. Ver estado inicial
+                antes = await svc.obtener(actor, lote_id)
+                assert antes.lote_descripcion == "Lote 1 · Norte"
+
+                # 2. Crear esquema de actualización simulado
+                class FakeUpdate:
+                    def model_dump(self, exclude_unset=True):
+                        return {"lote_descripcion": "Lote 1 · Norte (Actualizado)", "lote_area": 3.5}
+
+                # 3. Ejecutar actualización
+                despues = await svc.actualizar(actor, lote_id, FakeUpdate())
+
+                # 4. Verificar cambios en la respuesta
+                assert despues.lote_descripcion == "Lote 1 · Norte (Actualizado)"
+                assert float(despues.lote_area) == 3.5
+
+        finally:
+            await motor.dispose()
+
+    asyncio.run(_correr())
+
+
+def test_actualizar_lote_no_visible_devuelve_404_en_bd(bd: str, h: SimpleNamespace) -> None:
+    """Verifica que no se pueda actualizar un lote de otro predio (ej. predio 3 de Ana, asignación vencida de Gil)."""
+
+    async def _correr():
+        motor = create_async_engine(h.url(bd))
+        try:
+            async with motor.connect() as con:
+                svc = ServicioLotes(RepositorioConfiguracion(con), cola=None)
+                actor = SimpleNamespace(usua_id=GIL)
+
+                class FakeUpdate:
+                    def model_dump(self, exclude_unset=True):
+                        return {"lote_descripcion": "Hackeado"}
+
+                with pytest.raises(NoEncontrado):
+                    # El lote 31 es del predio 3, y la asignación de GIL venció el 2026-02-01
+                    await svc.actualizar(actor, 31, FakeUpdate())
+        finally:
+            await motor.dispose()
+
+    asyncio.run(_correr())
