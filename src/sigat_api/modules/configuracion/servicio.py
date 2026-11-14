@@ -131,6 +131,10 @@ class ServicioLotes:
             raise NoEncontrado("El lote no existe o no es visible para usted.", codigo="LOTE_NO_ENCONTRADO")
         return e.LoteDetalle(**fila)
 
+    async def geometrias(self, actor: Actor, lote_id: int) -> list[e.VersionGeometriaLote]:
+        """Versiones de la geometría del lote (ADR-06)."""
+        raise NoImplementado("Versiones de geometría")
+
     async def nueva_geometria(
         self, actor: Actor, lote_id: int, s: e.EntradaGeometria
     ) -> e.VersionGeometriaLote:
