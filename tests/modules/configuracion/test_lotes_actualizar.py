@@ -1,97 +1,175 @@
-"""Pruebas unitarias de ``ServicioLotes.actualizar``."""
+"""Pruebas unitarias de ``ServicioLotes.actualizar`` con repositorio en memoria (sin BD)."""
 
 import asyncio
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
-from sigat_api.compartido.errores import NoEncontrado
+from sigat_api.compartido.errores import NoEncontrado, ReglaNegocio
+from sigat_api.modules.configuracion import esquemas as e
 from sigat_api.modules.configuracion.servicio import ServicioLotes
 
-
-class RepoFalsoActualizar:
-    """Doble de prueba para simular el repositorio en actualizar."""
-
-    def __init__(self):
-        self.lotes_visibles_ids = {10, 20}  # El actor solo puede ver estos
-        self.actualizado = False
-        self.cambios_recibidos = {}
-
-    async def lote_visible(self, usua_id: int, lote_id: int) -> bool:
-        return lote_id in self.lotes_visibles_ids and usua_id == 7
-
-    async def actualizar_lote(self, lote_id: int, cambios: dict) -> None:
-        self.actualizado = True
-        self.cambios_recibidos = cambios
-
-    # CORRECCIÓN CLAVE: Devolver un diccionario completo que cumpla con el esquema LoteDetalle
-    async def lote(self, lote_id: int) -> dict | None:
-        if lote_id in self.lotes_visibles_ids:
-            return {
-                "lote_id": lote_id,
-                "lote_codigo": "L10",
-                "lote_descripcion": "Actualizado",
-                "lote_area": 5.0,
-                "pred_id": 1,
-                "pred_nombre": "Predio Test",
-                "productor": "Productor Test",
-                "municipio": "Municipio Test",
-                "cultivo": None,
-                "variedad": None,
-                "vigilancia_activa": True,
-                "trampas_vigentes": 0,
-                "espc_id": None,
-                "vari_id": None,
-                "lote_fecha_plantacion": None,
-                "lote_fecha_registro": date(2023, 1, 1),
-                "lote_fecha_baja": None,
-                "geometria": None,
-                "geometria_version": None,
-            }
-        return None
+ACTOR = SimpleNamespace(usua_id=4)
 
 
-def _servicio_actualizar():
-    repo = RepoFalsoActualizar()
-    return ServicioLotes(repo, cola=None), repo
+def _fila(**extra) -> dict:
+    """Fila de detalle como la devuelve ``repo.lote`` (v_lote_app + columnas de sigat.lote)."""
+    base = {
+        "lote_id": 11,
+        "lote_codigo": "L11",
+        "lote_descripcion": "Lote 1 · Norte",
+        "lote_area": Decimal("2"),
+        "pred_id": 1,
+        "pred_nombre": "Predio Ana",
+        "productor": "Ana Productora",
+        "municipio": "Muni",
+        "cultivo": None,
+        "variedad": None,
+        "vigilancia_activa": False,
+        "trampas_vigentes": 0,
+        "espc_id": None,
+        "vari_id": None,
+        "lote_fecha_plantacion": None,
+        "lote_fecha_registro": date(2026, 1, 1),
+        "lote_fecha_baja": None,
+        "geometria": None,
+        "geometria_version": None,
+    }
+    return {**base, **extra}
 
 
-ACTOR = SimpleNamespace(usua_id=7)
+class RepoFalso:
+    """Imita al repositorio real: ``lote`` devuelve None si el lote está de baja (como v_lote_app)."""
+
+    def __init__(self, fila: dict, visible: bool = True) -> None:
+        self.fila = dict(fila)
+        self.visible = visible
+        self.actualizaciones: list[dict] = []
+        self.lecturas = 0
+
+    async def lote_visible(self, usua_id, lote_id):
+        return self.visible
+
+    async def lote(self, lote_id):
+        self.lecturas += 1
+        if self.fila.get("lote_fecha_baja") is not None:
+            return None
+        return dict(self.fila)
+
+    async def actualizar_lote(self, lote_id, cambios):
+        self.actualizaciones.append(dict(cambios))
+        # Solo las columnas que existen en la fila de detalle (la auditoría no vuelve en la lectura).
+        self.fila.update({k: v for k, v in cambios.items() if k in self.fila})
 
 
-def test_actualizar_lote_exitoso():
-    svc, repo = _servicio_actualizar()
-
-    # Simulamos el esquema de Pydantic con solo algunos campos
-    class FakeSchema:
-        def model_dump(self, exclude_unset=True):
-            return {"lote_descripcion": "Nuevo nombre", "lote_area": 5.0}
-
-    resultado = asyncio.run(svc.actualizar(ACTOR, 10, FakeSchema()))
-
-    assert repo.actualizado is True
-
-    # Verificamos que los campos de auditoría SE INYECTARON en el diccionario
-    assert "lote_descripcion" in repo.cambios_recibidos
-    assert "lote_area" in repo.cambios_recibidos
-    assert repo.cambios_recibidos["lote_tecnico_actualizacion_id"] == 7
-    assert "lote_fecha_actualizacion" in repo.cambios_recibidos
-
-    # Verificamos que el servicio devolvió el objeto correctamente
-    assert resultado.lote_id == 10
-    assert resultado.lote_descripcion == "Actualizado"  # Viene del mock de `lote`
+def _servicio(fila=None, visible=True):
+    repo = RepoFalso(fila or _fila(), visible)
+    return ServicioLotes(repo, cola=None), repo  # type: ignore[arg-type]
 
 
-def test_actualizar_lote_no_visible_devuelve_404():
-    svc, repo = _servicio_actualizar()
+def _actualizar(svc, **campos):
+    return asyncio.run(svc.actualizar(ACTOR, 11, e.ActualizacionLote(**campos)))
 
-    class FakeSchema:
-        def model_dump(self, exclude_unset=True):
-            return {"lote_descripcion": "Hack"}
 
+# ------------------------------------------------------------------ camino feliz
+def test_actualiza_solo_los_campos_enviados_y_la_fecha_de_auditoria():
+    svc, repo = _servicio()
+    detalle = _actualizar(svc, lote_descripcion="Nueva descripción")
+
+    assert detalle.lote_descripcion == "Nueva descripción"
+    [cambios] = repo.actualizaciones
+    assert set(cambios) == {"lote_descripcion", "lote_fecha_actualizacion"}
+    # la columna es ``date`` (no datetime) y no se toca la FK a tecnico
+    assert type(cambios["lote_fecha_actualizacion"]) is date
+    assert not isinstance(cambios["lote_fecha_actualizacion"], datetime)
+    assert "lote_tecnico_actualizacion_id" not in cambios
+
+
+def test_actualizacion_comun_hace_una_sola_lectura():
+    """Sin baja ni cambio de especie/variedad no hay lectura previa (evita consultas redundantes)."""
+    svc, repo = _servicio()
+    _actualizar(svc, lote_area=Decimal("3.5"))
+    assert repo.lecturas == 1
+
+
+# ------------------------------------------------------------------ acceso y validaciones
+def test_lote_no_visible_devuelve_404_y_no_escribe():
+    svc, repo = _servicio(visible=False)
     with pytest.raises(NoEncontrado) as exc:
-        asyncio.run(svc.actualizar(ACTOR, 999, FakeSchema()))  # 999 no está en lotes_visibles_ids
+        _actualizar(svc, lote_descripcion="X")
+    assert exc.value.codigo == "LOTE_NO_ENCONTRADO"
+    assert repo.actualizaciones == []
 
-    assert "no es visible" in str(exc.value)
-    assert repo.actualizado is False  # Nunca llegó a la BD
+
+def test_body_vacio_es_422_y_no_escribe():
+    svc, repo = _servicio()
+    with pytest.raises(ReglaNegocio) as exc:
+        _actualizar(svc)
+    assert exc.value.codigo == "ACTUALIZACION_VACIA"
+    assert repo.actualizaciones == []
+
+
+@pytest.mark.parametrize("campo", ["lote_descripcion", "lote_area"])
+def test_null_explicito_en_columna_obligatoria_es_422(campo):
+    svc, repo = _servicio()
+    with pytest.raises(ReglaNegocio) as exc:
+        _actualizar(svc, **{campo: None})
+    assert exc.value.codigo == "CAMPO_OBLIGATORIO"
+    assert repo.actualizaciones == []
+
+
+@pytest.mark.parametrize("area", [Decimal("0"), Decimal("-1")])
+def test_area_no_positiva_la_rechaza_el_esquema(area):
+    with pytest.raises(ValidationError):
+        e.ActualizacionLote(lote_area=area)
+
+
+def test_el_productor_no_es_editable():
+    """``ActualizacionLote`` no tiene campo de productor: o se rechaza o se ignora, nunca llega al UPDATE."""
+    try:
+        s = e.ActualizacionLote(productor="Otro")  # type: ignore[call-arg]
+    except ValidationError:
+        return
+    assert s.model_dump(exclude_unset=True) == {}
+
+
+# ------------------------------------------------------------------ especie / variedad
+def test_variedad_sin_especie_es_422():
+    svc, repo = _servicio(_fila(espc_id=None, vari_id=None))
+    with pytest.raises(ReglaNegocio) as exc:
+        _actualizar(svc, vari_id=1)
+    assert exc.value.codigo == "VARIEDAD_SIN_ESPECIE"
+    assert repo.actualizaciones == []
+
+
+def test_cambiar_especie_sin_vari_id_cuando_ya_tenia_variedad_es_422():
+    svc, repo = _servicio(_fila(espc_id=1, vari_id=1))
+    with pytest.raises(ReglaNegocio) as exc:
+        _actualizar(svc, espc_id=2)
+    assert exc.value.codigo == "VARIEDAD_INCOHERENTE"
+    assert repo.actualizaciones == []
+
+
+def test_cambiar_especie_limpiando_variedad_es_valido():
+    svc, _ = _servicio(_fila(espc_id=1, vari_id=1))
+    detalle = _actualizar(svc, espc_id=2, vari_id=None)
+    assert (detalle.espc_id, detalle.vari_id) == (2, None)
+
+
+def test_asignar_especie_a_lote_sin_variedad_es_valido():
+    svc, _ = _servicio(_fila(espc_id=None, vari_id=None))
+    assert _actualizar(svc, espc_id=1).espc_id == 1
+
+
+# ------------------------------------------------------------------ baja
+def test_dar_de_baja_responde_200_con_el_detalle_aunque_la_vista_ya_lo_oculte():
+    svc, repo = _servicio()
+    detalle = _actualizar(svc, lote_fecha_baja=date(2026, 6, 1))
+
+    assert detalle.lote_id == 11
+    assert detalle.lote_fecha_baja == date(2026, 6, 1)
+    assert len(repo.actualizaciones) == 1
+    assert repo.lecturas == 2  # una previa (para poder responder) y una posterior (devuelve None)

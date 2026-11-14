@@ -3,12 +3,15 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from sigat_api.compartido.errores import NoEncontrado, NoImplementado
+from sigat_api.compartido.errores import NoEncontrado, NoImplementado, ReglaNegocio
 from sigat_api.compartido.tipos import Actor
 from sigat_api.infra.cola.cola import Cola
 from sigat_api.modules.configuracion import esquemas as e
 from sigat_api.modules.configuracion.repositorio import RepositorioConfiguracion
+
+_TZ_COLOMBIA = ZoneInfo("America/Bogota")
 
 # Columnas auxiliares que trae la vista para saber por qué no se puede confirmar la posición.
 # No forman parte del contrato HTTP: se quitan antes de construir el esquema de trampa.
@@ -80,27 +83,53 @@ class ServicioLotes:
         raise NoImplementado("Alta de lote")
 
     async def actualizar(self, actor: Actor, lote_id: int, s: e.ActualizacionLote) -> e.LoteDetalle:
-        """Actualiza solo los campos permitidos. El productor no se edita aquí (sale del predio)."""
+        """Actualiza solo los campos permitidos. El productor no se edita aquí (sale del predio).
 
-        # 1. Validar visibilidad primero (devuelve 404 si no le pertenece, por seguridad)
+        La autoría queda en ``bitacora_auditoria`` (``trg_aud_lote`` + ``sigat.usuario_actual``).
+        ``lote_tecnico_actualizacion_id`` NO se llena: es FK a ``tecnico`` y los roles que editan
+        lotes (administrador, agrónomo/supervisor) no tienen fila ahí.
+        """
         if not await self._repo.lote_visible(actor.usua_id, lote_id):
             raise NoEncontrado("El lote no existe o no es visible para usted.", codigo="LOTE_NO_ENCONTRADO")
-
-        # 2. Extraer solo los campos que el usuario envió (protege contra inyección)
         cambios = s.model_dump(exclude_unset=True)
+        if not cambios:
+            raise ReglaNegocio("Debe enviar al menos un campo para actualizar.", codigo="ACTUALIZACION_VACIA")
 
-        # 3. Inyectar campos de auditoría obligatorios
-        cambios["lote_fecha_actualizacion"] = datetime.now(UTC)
-        cambios["lote_tecnico_actualizacion_id"] = actor.usua_id
+        # Columnas NOT NULL: un null explícito no es "no cambiar", es un error.
+        for campo in ("lote_descripcion", "lote_area"):
+            if campo in cambios and cambios[campo] is None:
+                raise ReglaNegocio(f"{campo} no puede ser nulo.", codigo="CAMPO_OBLIGATORIO")
 
-        # 4. Ejecutar la actualización en la base de datos
+        # Coherencia especie/variedad antes de llegar a la FK compuesta.
+        actual = None
+        if "lote_fecha_baja" in cambios or ("espc_id" in cambios) != ("vari_id" in cambios):
+            actual = await self._repo.lote(lote_id)  # v_lote_app; None si no existe o ya está de baja
+            if actual is None:
+                raise NoEncontrado(
+                    "El lote no existe o no es visible para usted.", codigo="LOTE_NO_ENCONTRADO"
+                )
+            espc = cambios.get("espc_id", actual["espc_id"])
+            vari = cambios.get("vari_id", actual["vari_id"])
+            if vari is not None and espc is None:
+                raise ReglaNegocio("No se puede asignar variedad sin especie.", codigo="VARIEDAD_SIN_ESPECIE")
+            if "espc_id" in cambios and espc != actual["espc_id"] and actual["vari_id"] is not None:
+                raise ReglaNegocio(
+                    "Al cambiar la especie debe enviar también vari_id (o null para limpiarla).",
+                    codigo="VARIEDAD_INCOHERENTE",
+                )
+
+        cambios["lote_fecha_actualizacion"] = datetime.now(_TZ_COLOMBIA).date()
+
         await self._repo.actualizar_lote(lote_id, cambios)
 
-        # 5. Retornar el detalle actualizado
-        return await self.obtener(actor, lote_id)
-
-    async def geometrias(self, actor: Actor, lote_id: int) -> list[e.VersionGeometriaLote]:
-        raise NoImplementado("Versiones de geometría")
+        fila = await self._repo.lote(lote_id)
+        if fila is None and actual is not None:
+            # Este PATCH dio de baja el lote: v_lote_app ya lo oculta. Se responde con la fila
+            # previa más los campos que acaban de cambiar.
+            fila = {**actual, **{k: v for k, v in cambios.items() if k in actual}}
+        if fila is None:
+            raise NoEncontrado("El lote no existe o no es visible para usted.", codigo="LOTE_NO_ENCONTRADO")
+        return e.LoteDetalle(**fila)
 
     async def nueva_geometria(
         self, actor: Actor, lote_id: int, s: e.EntradaGeometria

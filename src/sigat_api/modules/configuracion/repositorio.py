@@ -28,6 +28,18 @@ SELECT v.*,
   LEFT JOIN sigat.v_trampa_lote_vigente vl ON vl.tram_id = v.tram_id
 """
 
+_COLUMNAS_EDITABLES_LOTE = frozenset(
+    {
+        "lote_descripcion",
+        "lote_area",
+        "espc_id",
+        "vari_id",
+        "lote_fecha_plantacion",
+        "lote_fecha_baja",
+        "lote_fecha_actualizacion",
+    }
+)
+
 
 class RepositorioConfiguracion:
     def __init__(self, con: AsyncConnection) -> None:
@@ -129,24 +141,16 @@ SELECT v.*,
         raise NoImplementado("Alta de lote")
 
     async def actualizar_lote(self, lote_id: int, cambios: dict[str, Any]) -> None:
-        """Actualiza los campos permitidos del lote.
-
-        Args:
-            lote_id: Identificador del lote a actualizar.
-            cambios: Diccionario con los campos nuevos (debe incluir los de auditoría).
-        """
+        """UPDATE con lista blanca de columnas. ``sigat.usuario_actual`` ya lo fija ``sesion.transaccion()``."""
         if not cambios:
             return
+        no_permitidas = set(cambios) - _COLUMNAS_EDITABLES_LOTE
+        if no_permitidas:
+            raise ValueError(f"Columnas no editables en lote: {sorted(no_permitidas)}")
 
-        # Construimos la cláusula SET dinámicamente
-        set_clauses = [f"{k} = :{k}" for k in cambios]
-        sql = f"UPDATE sigat.lote SET {', '.join(set_clauses)} WHERE lote_id = :lote_id"  # noqa: S608
-
-        # Ejecutamos la consulta con los parámetros
+        asignaciones = ", ".join(f"{k} = :{k}" for k in cambios)  # claves validadas contra la lista blanca
+        sql = f"UPDATE sigat.lote SET {asignaciones} WHERE lote_id = :lote_id"  # noqa: S608
         await self._con.execute(text(sql), {**cambios, "lote_id": lote_id})
-
-    async def versiones_geometria(self, lote_id: int) -> list[dict[str, Any]]:
-        raise NoImplementado("Versiones de geometría")
 
     async def nueva_version_geometria(
         self, lote_id: int, geojson: str, desde: datetime, fuente: str, motivo: str
